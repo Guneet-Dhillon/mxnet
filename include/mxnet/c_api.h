@@ -1,5 +1,23 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 /*!
- *  Copyright (c) 2015 by Contributors
  * \file c_api.h
  * \brief C API of mxnet
  */
@@ -127,6 +145,7 @@ enum CustomOpPropCallbacks {
   kCustomOpPropInferType
 };
 
+
 typedef int (*CustomOpFBFunc)(int /*size*/, void** /*ptrs*/, int* /*tags*/,
                               const int* /*reqs*/, const int /*is_train*/,
                               void* /*state*/);
@@ -145,6 +164,17 @@ typedef int (*CustomOpCreateFunc)(const char* /*ctx*/, int /*num_inputs*/,
 typedef int (*CustomOpPropCreator)(const char* /*op_type*/, const int /*num_kwargs*/,
                                    const char** /*keys*/, const char** /*values*/,
                                    struct MXCallbackList* /*ret*/);
+
+
+enum CustomFunctionCallbacks {
+  kCustomFunctionBackward,
+  kCustomFunctionDelete
+};
+
+typedef int (*CustomFunctionBwdFunc)(int /*num_ograds*/, int /*num_igrads*/, void** /*ptrs*/,
+                                     const int* /*reqs*/, const int /*is_train*/,
+                                     void* /*state*/);
+typedef int (*CustomFunctionDelFunc)(void* /*state*/);
 
 /*!
  * \brief return str message of the last error
@@ -553,11 +583,30 @@ MXNET_DLL int MXImperativeInvoke(AtomicSymbolCreator creator,
                                  const char **param_vals);
 /*!
  * \brief set whether to record operator for autograd
+ * \param is_recording 1 when recording, 0 when not recording.
+ * \param prev returns the previous status before this set.
+ * \return 0 when success, -1 when failure happens
+ */
+MXNET_DLL int MXAutogradSetIsRecording(int is_recording, int* prev);
+/*!
+ * \brief set whether to record operator for autograd
  * \param is_train 1 when training, 0 when testing
  * \param prev returns the previous status before this set.
  * \return 0 when success, -1 when failure happens
  */
 MXNET_DLL int MXAutogradSetIsTraining(int is_training, int* prev);
+/*!
+ * \brief get whether autograd recording is on
+ * \param curr returns the current status.
+ * \return 0 when success, -1 when failure happens
+ */
+MXNET_DLL int MXAutogradIsRecording(bool* curr);
+/*!
+ * \brief get whether training mode is on
+ * \param curr returns the current status.
+ * \return 0 when success, -1 when failure happens
+ */
+MXNET_DLL int MXAutogradIsTraining(bool* curr);
 /*!
  * \brief mark NDArrays as variables to compute gradient for autograd
  * \param num_var number of variable NDArrays
@@ -588,6 +637,26 @@ MXNET_DLL int MXAutogradBackward(mx_uint num_output,
                                  NDArrayHandle* output_handles,
                                  NDArrayHandle* ograd_handles,
                                  int retain_graph);
+/*!
+* \brief compute the gradient of outputs w.r.t variabels
+* \param num_output number of output NDArray
+* \param output_handles output NDArrays
+* \param ograd_handles head gradient for NDArrays
+* \param retain_graph whether to keep the graph after backward
+* \param is_train whether to do backward for training or inference
+* \return 0 when success, -1 when failure happens
+*/
+MXNET_DLL int MXAutogradBackwardEx(mx_uint num_output,
+                                   NDArrayHandle* output_handles,
+                                   NDArrayHandle* ograd_handles,
+                                   int retain_graph,
+                                   int is_train);
+/*
+ * \brief get the graph constructed by autograd.
+ * \param handle ndarray handle
+ * \param out output symbol handle
+ */
+MXNET_DLL int MXAutogradGetSymbol(NDArrayHandle handle, SymbolHandle *out);
 /*!
  * \brief create cached operator
  */
@@ -1028,7 +1097,20 @@ MXNET_DLL int MXExecutorForward(ExecutorHandle handle, int is_train);
 MXNET_DLL int MXExecutorBackward(ExecutorHandle handle,
                                  mx_uint len,
                                  NDArrayHandle *head_grads);
-
+/*!
+ * \brief Excecutor run backward
+ *
+ * \param handle execute handle
+ * \param len lenth
+ * \param head_grads NDArray handle for heads' gradient
+ * \param is_train int value to indicate whether the backward pass is for evaluation
+ *
+ * \return 0 when success, -1 when failure happens
+ */
+MXNET_DLL int MXExecutorBackwardEx(ExecutorHandle handle,
+                                   mx_uint len,
+                                   NDArrayHandle *head_grads,
+                                   int is_train);
 /*!
  * \brief Get executor's head NDArray
  *
@@ -1622,8 +1704,23 @@ MXNET_DLL int MXRtcPush(RtcHandle handle, mx_uint num_input, mx_uint num_output,
  * \brief Delete a MXRtc object
 */
 MXNET_DLL int MXRtcFree(RtcHandle handle);
-
+/*
+ * \brief register custom operators from frontend.
+ * \param op_type name of custom op
+ * \param creator
+ */
 MXNET_DLL int MXCustomOpRegister(const char* op_type, CustomOpPropCreator creator);
+/*
+ * \brief record custom function for backward later.
+ * \param num_inputs number of input NDArrays.
+ * \param inputs handle to input NDArrays.
+ * \param num_outputs number of output NDArrays.
+ * \param outputs handle to output NDArrays.
+ * \param callbacks callbacks for backward function.
+ */
+MXNET_DLL int MXCustomFunctionRecord(int num_inputs, NDArrayHandle *inputs,
+                                     int num_outputs, NDArrayHandle *outputs,
+                                     MXCallbackList *callbacks);
 
 #ifdef __cplusplus
 }

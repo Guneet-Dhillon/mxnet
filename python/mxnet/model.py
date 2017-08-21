@@ -1,3 +1,20 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 # pylint: disable=fixme, invalid-name, too-many-arguments, too-many-locals, too-many-lines
 # pylint: disable=too-many-branches, too-many-statements
 """MXNet model module"""
@@ -913,7 +930,7 @@ class FeedForward(BASE_ESTIMATOR):
             ``ceil(num_train_examples / batch_size)``.
         optimizer : str or Optimizer, optional
             The name of the chosen optimizer, or an optimizer object, used for training.
-        initializier : initializer function, optional
+        initializer : initializer function, optional
             The initialization scheme used.
         eval_data : DataIter or numpy.ndarray pair
             If `eval_set` is ``numpy.ndarray`` pair, it should
@@ -929,7 +946,7 @@ class FeedForward(BASE_ESTIMATOR):
             A callback that is invoked at end of each batch for print purposes.
         kvstore: KVStore or str, optional
            The KVStore or a string kvstore type: 'local', 'dist_sync', 'dis_async'.
-           Defaults to 'local', often no need to change for single machiine.
+           Defaults to 'local', often no need to change for single machine.
         logger : logging logger, optional
             When not specified, default logger will be used.
         work_load_list : list of float or int, optional

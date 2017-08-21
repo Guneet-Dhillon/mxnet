@@ -1,3 +1,20 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 # coding: utf-8
 # pylint: disable= arguments-differ
 """Basic neural network layers."""
@@ -38,6 +55,12 @@ class Sequential(Block):
         return s.format(name=self.__class__.__name__,
                         modstr=modstr)
 
+    def __getitem__(self, i):
+        return self._children[i]
+
+    def __len__(self):
+        return len(self._children)
+
 
 class HybridSequential(HybridBlock):
     """Stacks `HybridBlock`s sequentially.
@@ -70,6 +93,12 @@ class HybridSequential(HybridBlock):
                             if isinstance(block, Block)])
         return s.format(name=self.__class__.__name__,
                         modstr=modstr)
+
+    def __getitem__(self, i):
+        return self._children[i]
+
+    def __len__(self):
+        return len(self._children)
 
 
 class Dense(HybridBlock):
@@ -132,15 +161,17 @@ class Dense(HybridBlock):
             else:
                 self.bias = None
             if activation is not None:
-                self.act = Activation(activation)
+                self.act = Activation(activation, prefix=activation+'_')
             else:
                 self.act = None
 
     def hybrid_forward(self, F, x, weight, bias=None):
         if bias is None:
-            act = F.FullyConnected(x, weight, no_bias=True, num_hidden=self._units)
+            act = F.FullyConnected(x, weight, no_bias=True, num_hidden=self._units,
+                                   name='fwd')
         else:
-            act = F.FullyConnected(x, weight, bias, num_hidden=self._units)
+            act = F.FullyConnected(x, weight, bias, num_hidden=self._units,
+                                   name='fwd')
         if self.act is not None:
             act = self.act(act)
         return act
@@ -177,7 +208,7 @@ class Activation(HybridBlock):
         return self._act_type
 
     def hybrid_forward(self, F, x):
-        return F.Activation(x, act_type=self._act_type)
+        return F.Activation(x, act_type=self._act_type, name='fwd')
 
     def __repr__(self):
         s = '{name}({_act_type})'
@@ -213,7 +244,7 @@ class Dropout(HybridBlock):
         self._rate = rate
 
     def hybrid_forward(self, F, x):
-        return F.Dropout(x, p=self._rate)
+        return F.Dropout(x, p=self._rate, name='fwd')
 
     def __repr__(self):
         s = '{name}(p = {_rate})'
@@ -235,7 +266,7 @@ class BatchNorm(HybridBlock):
         set `axis=1` in `BatchNorm`. If `layout='NHWC'`, then set `axis=3`.
     momentum: float, default 0.9
         Momentum for the moving average.
-    epsilon: float, default 1e-3
+    epsilon: float, default 1e-5
         Small float added to variance to avoid dividing by zero.
     center: bool, default True
         If True, add offset of `beta` to normalized tensor.
@@ -265,33 +296,38 @@ class BatchNorm(HybridBlock):
     Output shape:
         Same shape as input.
     """
-    def __init__(self, axis=1, momentum=0.9, epsilon=1e-3, center=True, scale=True,
+    def __init__(self, axis=1, momentum=0.9, epsilon=1e-5, center=True, scale=True,
                  beta_initializer='zeros', gamma_initializer='ones',
                  running_mean_initializer='zeros', running_variance_initializer='ones',
                  in_channels=0, **kwargs):
         super(BatchNorm, self).__init__(**kwargs)
         self._kwargs = {'axis': axis, 'eps': epsilon, 'momentum': momentum,
-                        'fix_gamma': not center}
+                        'fix_gamma': not scale}
         if in_channels != 0:
             self.in_channels = in_channels
 
         self.gamma = self.params.get('gamma', grad_req='write' if scale else 'null',
                                      shape=(in_channels,), init=gamma_initializer,
-                                     allow_deferred_init=True)
+                                     allow_deferred_init=True,
+                                     differentiable=scale)
         self.beta = self.params.get('beta', grad_req='write' if center else 'null',
                                     shape=(in_channels,), init=beta_initializer,
-                                    allow_deferred_init=True)
+                                    allow_deferred_init=True,
+                                    differentiable=center)
         self.running_mean = self.params.get('running_mean', grad_req='null',
                                             shape=(in_channels,),
                                             init=running_mean_initializer,
-                                            allow_deferred_init=True)
+                                            allow_deferred_init=True,
+                                            differentiable=False)
         self.running_var = self.params.get('running_var', grad_req='null',
                                            shape=(in_channels,),
                                            init=running_variance_initializer,
-                                           allow_deferred_init=True)
+                                           allow_deferred_init=True,
+                                           differentiable=False)
 
     def hybrid_forward(self, F, x, gamma, beta, running_mean, running_var):
-        return F.BatchNorm(x, gamma, beta, running_mean, running_var, **self._kwargs)
+        return F.BatchNorm(x, gamma, beta, running_mean, running_var,
+                           name='fwd', **self._kwargs)
 
     def __repr__(self):
         s = '{name}({content}'
@@ -328,7 +364,7 @@ class LeakyReLU(HybridBlock):
         self._alpha = alpha
 
     def hybrid_forward(self, F, x):
-        return F.LeakyReLU(x, act_type='leaky', slope=self._alpha)
+        return F.LeakyReLU(x, act_type='leaky', slope=self._alpha, name='fwd')
 
     def __repr__(self):
         s = '{name}({alpha})'
@@ -369,11 +405,11 @@ class Embedding(HybridBlock):
                                       allow_deferred_init=True)
 
     def hybrid_forward(self, F, x, weight):
-        return F.Embedding(x, weight, **self._kwargs)
+        return F.Embedding(x, weight, name='fwd', **self._kwargs)
 
     def __repr__(self):
-        s = '{name}({input_dim} -> {output_dim}, {dtype})'
-        return s.format(name=self.__class__.__name__,
+        s = '{block_name}({input_dim} -> {output_dim}, {dtype})'
+        return s.format(block_name=self.__class__.__name__,
                         **self._kwargs)
 
 
