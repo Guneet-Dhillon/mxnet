@@ -18,39 +18,40 @@
  */
 
 /*!
- * \file sotchastic.cc
+ * \file stochastic_activation_pruning.cc
  * \brief
  * \author Guneet Singh Dhillon
 */
 
-#include "./stochastic-inl.h"
+#include "./stochastic_activation_pruning-inl.h"
 
 namespace mxnet {
 namespace op {
 template<>
-Operator *CreateOp<cpu>(StochasticParam param, int dtype) {
+Operator *CreateOp<cpu>(StochasticActivationPruningParam param, int dtype) {
   Operator *op = NULL;
   MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {
-    op = new StochasticOp<cpu, DType>(param);
+    op = new StochasticActivationPruningOp<cpu, DType>(param);
   });
   return op;
 }
 
 // DO_BIND_DISPATCH comes from operator_common.h
-Operator *StochasticProp::CreateOperatorEx(Context ctx, std::vector<TShape> *in_shape,
-                                              std::vector<int> *in_type) const {
+Operator *StochasticActivationPruningProp::CreateOperatorEx(Context ctx,
+  std::vector<TShape> *in_shape, std::vector<int> *in_type) const {
   DO_BIND_DISPATCH(CreateOp, param_, in_type->at(0));
 }
 
-DMLC_REGISTER_PARAMETER(StochasticParam);
+DMLC_REGISTER_PARAMETER(StochasticActivationPruningParam);
 
-MXNET_REGISTER_OP_PROPERTY(Stochastic, StochasticProp)
-.describe(R"(Applies stochastic activation pruning operation to input array.
+MXNET_REGISTER_OP_PROPERTY(StochasticActivationPruning,
+  StochasticActivationPruningProp)
+.describe(R"(Applies stochastic activation pruning on activation map input.
 )" ADD_FILELINE)
-.add_argument("act", "NDArray-or-Symbol", "activation")
-.add_argument("prob", "NDArray-or-Symbol", "probability")
-.add_arguments(StochasticParam::__FIELDS__());
+.add_argument("act", "NDArray-or-Symbol", "flattened activation map")
+.add_argument("prob", "NDArray-or-Symbol",
+  "probabilities corresponding to the activations")
+.add_arguments(StochasticActivationPruningParam::__FIELDS__());
 
 }  // namespace op
 }  // namespace mxnet
-

@@ -18,12 +18,12 @@
  */
 
 /*!
- * \file stochastic.cc
+ * \file stochastic_activation_pruning.cc
  * \brief
  * \author Guneet Singh Dhillon
 */
 
-#include "./stochastic-inl.h"
+#include "./stochastic_activation_pruning-inl.h"
 
 #include <random>
 #include <./math.h>
@@ -39,16 +39,16 @@ __global__ void forward_kernel_0(DType *mask_ptr, int mask_size) {
 }
 
 template<typename DType>
-__global__ void forward_kernel_1(DType *out_ptr, DType *act_ptr, DType *mask_ptr,
-  int mask_size) {
+__global__ void forward_kernel_1(DType *out_ptr, DType *act_ptr,
+  DType *mask_ptr, int mask_size) {
     int index = threadIdx.x + (blockIdx.x * blockDim.x);
     if (index < mask_size)
       out_ptr[index] = act_ptr[index] * mask_ptr[index];
 }
 
 template<typename DType>
-__global__ void backward_kernel(DType *act_ptr, DType *grad_ptr, DType *mask_ptr,
-  DType *prob_ptr, int mask_size) {
+__global__ void backward_kernel(DType *act_ptr, DType *grad_ptr,
+  DType *mask_ptr, DType *prob_ptr, int mask_size) {
     int index = threadIdx.x + (blockIdx.x * blockDim.x);
     if (index < mask_size) {
       act_ptr[index] = grad_ptr[index] * mask_ptr[index];
@@ -75,7 +75,8 @@ inline void forward_GPU(
     const int mask_col = mask.shape_[1];
     const int mask_size = mask_row * mask_col;
 
-    cuda::forward_kernel_0<DType><<<(mask_size / 512) + 1, 512>>>(mask_ptr, mask_size);
+    cuda::forward_kernel_0<DType><<<(mask_size / 512) + 1, 512>>>
+      (mask_ptr, mask_size);
 
     int size = mask_size * sizeof(DType);
     DType* host_mask_ptr = (DType*) malloc(size);
@@ -86,19 +87,21 @@ inline void forward_GPU(
     std::default_random_engine gen (seed);
   #pragma omp parallel for
     for (int i = 0; i < mask_row; ++i) {
-      std::discrete_distribution<int> dist (&(host_prob_ptr[i * mask_col]), &(host_prob_ptr[(i+1) * mask_col]));
+      std::discrete_distribution<int> dist (&(host_prob_ptr[i * mask_col]),
+        &(host_prob_ptr[(i+1) * mask_col]));
     #pragma omp parallel for
       for (int j = 0; j < k; ++j) {
         int index = (i * mask_col) + dist(gen);
-        host_mask_ptr[index] = DType(1.0 / (1.0 - pow(1.0 - double(host_prob_ptr[index]), k)));
+        host_mask_ptr[index] =
+          DType(1.0 / (1.0 - pow(1.0 - double(host_prob_ptr[index]), k)));
       }
     }
     cudaMemcpy(mask_ptr, host_mask_ptr, size, cudaMemcpyHostToDevice);
     free(host_mask_ptr);
     free(host_prob_ptr);
 
-    cuda::forward_kernel_1<DType><<<(mask_size / 512) + 1, 512>>>(out_ptr, act_ptr,
-      mask_ptr, mask_size);
+    cuda::forward_kernel_1<DType><<<(mask_size / 512) + 1, 512>>>
+      (out_ptr, act_ptr, mask_ptr, mask_size);
 }
 
 template<typename xpu, typename DType>
@@ -125,13 +128,14 @@ namespace mxnet {
 namespace op {
 
 template<>
-Operator *CreateOp<gpu>(StochasticParam param, int dtype) {
+Operator *CreateOp<gpu>(StochasticActivationPruningParam param, int dtype) {
   Operator *op = NULL;
   MSHADOW_REAL_TYPE_SWITCH(dtype, DType, {
-    op = new StochasticOp<gpu, DType>(param);
+    op = new StochasticActivationPruningOp<gpu, DType>(param);
   });
   return op;
 }
 }  // namespace op
 }  // namespace mxnet
+
 

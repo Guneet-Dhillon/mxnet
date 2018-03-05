@@ -160,4 +160,3 @@ struct _complexl    /* as used by "cabsl" function */
 #endif  /* !__STDC__ */
 
 #endif
-

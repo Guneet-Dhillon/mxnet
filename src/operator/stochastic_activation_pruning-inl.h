@@ -18,7 +18,7 @@
  */
 
 /*!
- * \file stochastic-inl.h
+ * \file stochastic_activation_pruning-inl.h
  * \brief
  * \author Guneet Singh Dhillon
 */
@@ -46,26 +46,28 @@
 #endif  // USE_MKL && _OPENMP
 
 
-namespace stochastic {
-enum StochasticOpInputs {kAct, kProb};
-enum StochasticOpOutputs {kOut, kMask};
-}  // namespace stochastic
+namespace stochastic_activation_pruning {
+enum StochasticActivationPruningOpInputs {kAct, kProb};
+enum StochasticActivationPruningOpOutputs {kOut, kMask};
+}  // namespace stochastic_activation_pruning
 
 namespace mxnet {
 namespace op {
 
-struct StochasticParam : public dmlc::Parameter<StochasticParam> {
+struct StochasticActivationPruningParam :
+  public dmlc::Parameter<StochasticActivationPruningParam> {
   float frac;
-  DMLC_DECLARE_PARAMETER(StochasticParam) {
+  DMLC_DECLARE_PARAMETER(StochasticActivationPruningParam) {
     DMLC_DECLARE_FIELD(frac).set_default(1.0)
     .describe("Fraction of the input that need to be sampled.");
   }
-};  // struct StochasticParam
+};  // struct StochasticActivationPruningParam
 
 template<typename xpu, typename DType>
-class StochasticOp : public Operator {
+class StochasticActivationPruningOp : public Operator {
  public:
-  explicit StochasticOp(StochasticParam param) {
+  explicit StochasticActivationPruningOp(
+    StochasticActivationPruningParam param) {
     this->frac_ = param.frac;
   }
 
@@ -79,10 +81,14 @@ class StochasticOp : public Operator {
     CHECK_EQ(in_data.size(), 2U);
     CHECK_EQ(out_data.size(), 2U);
     Stream<xpu> *s = ctx.get_stream<xpu>();
-    Tensor<xpu, 2, DType> act = in_data[stochastic::kAct].FlatTo2D<xpu, DType>(s);
-    Tensor<xpu, 2, DType> prob = in_data[stochastic::kProb].FlatTo2D<xpu, DType>(s);
-    Tensor<xpu, 2, DType> mask = out_data[stochastic::kMask].FlatTo2D<xpu, DType>(s);
-    Tensor<xpu, 2, DType> out = out_data[stochastic::kOut].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> act =
+      in_data[stochastic_activation_pruning::kAct].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> prob =
+      in_data[stochastic_activation_pruning::kProb].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> mask =
+      out_data[stochastic_activation_pruning::kMask].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> out =
+      out_data[stochastic_activation_pruning::kOut].FlatTo2D<xpu, DType>(s);
 
 #if !defined(__CUDACC__)
     DType* act_ptr = act.dptr_;
@@ -107,11 +113,13 @@ class StochasticOp : public Operator {
     std::default_random_engine gen (seed);
   #pragma omp parallel for
     for (int i = 0; i < mask_row; ++i) {
-      std::discrete_distribution<int> dist (&(prob_ptr[i * mask_col]), &(prob_ptr[(i+1) * mask_col]));
+      std::discrete_distribution<int> dist (&(prob_ptr[i * mask_col]),
+        &(prob_ptr[(i+1) * mask_col]));
     #pragma omp parallel for
       for (int j = 0; j < k; ++j) {
         int index = (i * mask_col) + dist(gen);
-        mask_ptr[index] = DType(1.0 / (1.0 - pow(1.0 - double(prob_ptr[index]), k)));
+        mask_ptr[index] =
+          DType(1.0 / (1.0 - pow(1.0 - double(prob_ptr[index]), k)));
       }
     }
 
@@ -140,10 +148,14 @@ class StochasticOp : public Operator {
     CHECK_EQ(out_grad.size(), 1U);
     CHECK_EQ(in_grad.size(), 2U);
     Stream<xpu> *s = ctx.get_stream<xpu>();
-    Tensor<xpu, 2, DType> grad = out_grad[stochastic::kOut].FlatTo2D<xpu, DType>(s);
-    Tensor<xpu, 2, DType> mask = out_data[stochastic::kMask].FlatTo2D<xpu, DType>(s);
-    Tensor<xpu, 2, DType> act = in_grad[stochastic::kAct].FlatTo2D<xpu, DType>(s);
-    Tensor<xpu, 2, DType> prob = in_grad[stochastic::kProb].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> grad =
+      out_grad[stochastic_activation_pruning::kOut].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> mask =
+      out_data[stochastic_activation_pruning::kMask].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> act =
+      in_grad[stochastic_activation_pruning::kAct].FlatTo2D<xpu, DType>(s);
+    Tensor<xpu, 2, DType> prob =
+      in_grad[stochastic_activation_pruning::kProb].FlatTo2D<xpu, DType>(s);
 
 #if !defined(__CUDACC__)
     DType* grad_ptr = grad.dptr_;
@@ -167,15 +179,16 @@ class StochasticOp : public Operator {
 
  private:
   real_t frac_;
-};  // class StochasticOp
+};  // class StochasticActivationPruningOp
 
 template<typename xpu>
-Operator *CreateOp(StochasticParam param, int dtype);
+Operator *CreateOp(StochasticActivationPruningParam param, int dtype);
 
 #if DMLC_USE_CXX11
-class StochasticProp : public OperatorProperty {
+class StochasticActivationPruningProp : public OperatorProperty {
  public:
-  void Init(const std::vector<std::pair<std::string, std::string> >& kwargs) override {
+  void Init(const std::vector<std::pair<std::string, std::string> >& kwargs)
+    override {
     param_.Init(kwargs);
   }
 
@@ -203,7 +216,7 @@ class StochasticProp : public OperatorProperty {
     int dtype = in_type->at(0);
 
     if (dtype == -1) {
-      LOG(FATAL) << "input type to stochastic is not specified.";
+      LOG(FATAL) << "input type is not specified.";
       return false;
     }
 
@@ -214,20 +227,21 @@ class StochasticProp : public OperatorProperty {
   }
 
   OperatorProperty* Copy() const override {
-    auto ptr = new StochasticProp();
+    auto ptr = new StochasticActivationPruningProp();
     ptr->param_ = param_;
     return ptr;
   }
 
   std::string TypeString() const override {
-    return "Stochastic";
+    return "StochasticActivationPruning";
   }
 
   std::vector<int> DeclareBackwardDependency(
     const std::vector<int> &out_grad,
     const std::vector<int> &in_data,
     const std::vector<int> &out_data) const override {
-    return {out_grad[stochastic::kOut], out_data[stochastic::kMask]};
+    return {out_grad[stochastic_activation_pruning::kOut],
+      out_data[stochastic_activation_pruning::kMask]};
   }
 
   int NumVisibleOutputs() const override {
@@ -247,7 +261,7 @@ class StochasticProp : public OperatorProperty {
   }
 
   Operator* CreateOperator(Context ctx) const override {
-    LOG(FATAL) << "Not Implemented";
+    LOG(FATAL) << "not Implemented";
     return NULL;
   }
 
@@ -255,10 +269,9 @@ class StochasticProp : public OperatorProperty {
                              std::vector<int> *in_type) const override;
 
  private:
-  StochasticParam param_;
-};  // class StochasticProp
+  StochasticActivationPruningParam param_;
+};  // class StochasticActivationPruningProp
 #endif  // DMLC_USE_CXX11
 }  // namespace op
 }  // namespace mxnet
 #endif  // MXNET_OPERATOR_STOCHASTIC_INL_H_
-
